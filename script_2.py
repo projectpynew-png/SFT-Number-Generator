@@ -1,0 +1,444 @@
+# Create a simple HTML version for GitHub Pages as an alternative
+html_version = '''<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SFT Number Generator</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .header h1 {
+            color: #333;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            color: #666;
+            font-size: 1.1em;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        input, textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        
+        input:focus, textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+        
+        .result {
+            margin-top: 20px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #28a745;
+        }
+        
+        .result.error {
+            border-left-color: #dc3545;
+            background: #f8d7da;
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-top: 30px;
+        }
+        
+        .stat-card {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            border-left: 4px solid #667eea;
+        }
+        
+        .stat-card h3 {
+            color: #333;
+            font-size: 2em;
+            margin-bottom: 5px;
+        }
+        
+        .stat-card p {
+            color: #666;
+        }
+        
+        .history {
+            margin-top: 30px;
+        }
+        
+        .history-item {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .sft-number {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #667eea;
+        }
+        
+        .export-btn {
+            background: #28a745;
+            margin-left: 10px;
+        }
+        
+        @media (max-width: 600px) {
+            .container {
+                padding: 20px;
+            }
+            
+            .header h1 {
+                font-size: 2em;
+            }
+            
+            .stats {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔢 SFT Number Generator</h1>
+            <p>Generate unique SFT numbers for your applications (Range: 3000-9999)</p>
+        </div>
+        
+        <form id="sftForm">
+            <div class="form-group">
+                <label for="appName">Application Name *</label>
+                <input type="text" id="appName" required placeholder="e.g., WebApp_Authentication">
+            </div>
+            
+            <div class="form-group">
+                <label for="description">Description</label>
+                <textarea id="description" rows="3" placeholder="Brief description of the application"></textarea>
+            </div>
+            
+            <button type="submit" class="btn">🚀 Generate SFT Number</button>
+            <button type="button" class="btn export-btn" onclick="exportData()">📥 Export Data</button>
+        </form>
+        
+        <div id="result"></div>
+        
+        <div class="stats">
+            <div class="stat-card">
+                <h3 id="totalUsed">0</h3>
+                <p>Numbers Used</p>
+            </div>
+            <div class="stat-card">
+                <h3 id="remaining">7000</h3>
+                <p>Remaining</p>
+            </div>
+            <div class="stat-card">
+                <h3 id="percentage">0%</h3>
+                <p>Usage</p>
+            </div>
+        </div>
+        
+        <div class="history">
+            <h2>📋 Registration History</h2>
+            <div id="historyList">
+                <p style="text-align: center; color: #666; padding: 20px;">No applications registered yet.</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // SFT Number Generator JavaScript Implementation
+        class SFTGenerator {
+            constructor() {
+                this.minNumber = 3000;
+                this.maxNumber = 9999;
+                this.usedNumbers = this.loadUsedNumbers();
+                this.applications = this.loadApplications();
+                this.updateStats();
+                this.displayHistory();
+            }
+            
+            loadUsedNumbers() {
+                const stored = localStorage.getItem('sft_used_numbers');
+                return stored ? new Set(JSON.parse(stored)) : new Set();
+            }
+            
+            saveUsedNumbers() {
+                localStorage.setItem('sft_used_numbers', JSON.stringify([...this.usedNumbers]));
+            }
+            
+            loadApplications() {
+                const stored = localStorage.getItem('sft_applications');
+                return stored ? JSON.parse(stored) : [];
+            }
+            
+            saveApplications() {
+                localStorage.setItem('sft_applications', JSON.stringify(this.applications));
+            }
+            
+            generateUniqueNumber() {
+                const totalAvailable = this.maxNumber - this.minNumber + 1;
+                if (this.usedNumbers.size >= totalAvailable) {
+                    throw new Error('All SFT numbers have been exhausted!');
+                }
+                
+                let number;
+                do {
+                    number = Math.floor(Math.random() * (this.maxNumber - this.minNumber + 1)) + this.minNumber;
+                } while (this.usedNumbers.has(number));
+                
+                return number;
+            }
+            
+            registerApplication(appName, description = '') {
+                try {
+                    const sftNumber = this.generateUniqueNumber();
+                    this.usedNumbers.add(sftNumber);
+                    
+                    const application = {
+                        sftNumber: sftNumber,
+                        name: appName,
+                        description: description,
+                        registrationDate: new Date().toISOString(),
+                        status: 'Active'
+                    };
+                    
+                    this.applications.push(application);
+                    this.saveUsedNumbers();
+                    this.saveApplications();
+                    this.updateStats();
+                    this.displayHistory();
+                    
+                    return sftNumber;
+                } catch (error) {
+                    throw error;
+                }
+            }
+            
+            updateStats() {
+                const totalAvailable = this.maxNumber - this.minNumber + 1;
+                const used = this.usedNumbers.size;
+                const remaining = totalAvailable - used;
+                const percentage = ((used / totalAvailable) * 100).toFixed(2);
+                
+                document.getElementById('totalUsed').textContent = used.toLocaleString();
+                document.getElementById('remaining').textContent = remaining.toLocaleString();
+                document.getElementById('percentage').textContent = percentage + '%';
+            }
+            
+            displayHistory() {
+                const historyList = document.getElementById('historyList');
+                
+                if (this.applications.length === 0) {
+                    historyList.innerHTML = '<p style="text-align: center; color: #666; padding: 20px;">No applications registered yet.</p>';
+                    return;
+                }
+                
+                const sortedApps = [...this.applications].sort((a, b) => new Date(b.registrationDate) - new Date(a.registrationDate));
+                
+                historyList.innerHTML = sortedApps.map(app => `
+                    <div class="history-item">
+                        <div>
+                            <div style="font-weight: bold;">${app.name}</div>
+                            <div style="color: #666; font-size: 0.9em;">${app.description || 'No description'}</div>
+                            <div style="color: #999; font-size: 0.8em;">${new Date(app.registrationDate).toLocaleString()}</div>
+                        </div>
+                        <div class="sft-number">${app.sftNumber}</div>
+                    </div>
+                `).join('');
+            }
+            
+            exportToCSV() {
+                if (this.applications.length === 0) {
+                    alert('No data to export');
+                    return;
+                }
+                
+                const csvContent = [
+                    ['SFT Number', 'Application Name', 'Description', 'Registration Date', 'Status'],
+                    ...this.applications.map(app => [
+                        app.sftNumber,
+                        app.name,
+                        app.description,
+                        new Date(app.registrationDate).toLocaleString(),
+                        app.status
+                    ])
+                ].map(row => row.map(field => `"${field}"`).join(',')).join('\\n');
+                
+                const blob = new Blob([csvContent], { type: 'text/csv' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `sft_data_${new Date().toISOString().split('T')[0]}.csv`;
+                a.click();
+                window.URL.revokeObjectURL(url);
+            }
+        }
+        
+        // Initialize generator
+        const generator = new SFTGenerator();
+        
+        // Form submission
+        document.getElementById('sftForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const appName = document.getElementById('appName').value.trim();
+            const description = document.getElementById('description').value.trim();
+            const resultDiv = document.getElementById('result');
+            
+            if (!appName) {
+                resultDiv.innerHTML = '<div class="result error">❌ Please enter an application name.</div>';
+                return;
+            }
+            
+            try {
+                const sftNumber = generator.registerApplication(appName, description);
+                resultDiv.innerHTML = `
+                    <div class="result">
+                        ✅ Successfully registered '${appName}' with SFT Number: <strong>${sftNumber}</strong>
+                        <div style="margin-top: 10px; font-size: 1.5em; text-align: center; color: #667eea;">
+                            🎯 Your SFT Number: ${sftNumber}
+                        </div>
+                    </div>
+                `;
+                
+                // Clear form
+                document.getElementById('appName').value = '';
+                document.getElementById('description').value = '';
+                
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="result error">❌ Error: ${error.message}</div>`;
+            }
+        });
+        
+        // Export function
+        function exportData() {
+            generator.exportToCSV();
+        }
+        
+        // Clear data function (for testing)
+        function clearAllData() {
+            if (confirm('Are you sure you want to clear all data? This cannot be undone.')) {
+                localStorage.removeItem('sft_used_numbers');
+                localStorage.removeItem('sft_applications');
+                location.reload();
+            }
+        }
+        
+        // Add clear button (hidden by default)
+        if (window.location.hash === '#debug') {
+            const clearBtn = document.createElement('button');
+            clearBtn.textContent = '🗑️ Clear All Data';
+            clearBtn.className = 'btn';
+            clearBtn.style.background = '#dc3545';
+            clearBtn.style.marginLeft = '10px';
+            clearBtn.onclick = clearAllData;
+            document.querySelector('form').appendChild(clearBtn);
+        }
+    </script>
+</body>
+</html>'''
+
+with open('index.html', 'w') as f:
+    f.write(html_version)
+
+print("🌐 Created HTML version for GitHub Pages: index.html")
+
+# Create a comprehensive file list for the user
+print("\n📁 Complete File Structure for Deployment:")
+print("=" * 50)
+
+files_structure = """
+sft-number-generator/
+├── 📄 Core Python Files
+│   ├── sft_number_generator.py    # Main SFT generator class
+│   ├── sft_demo.py               # Demo/testing script
+│   └── streamlit_app.py          # Streamlit web application
+│
+├── 🌐 Web Deployment Files
+│   ├── index.html                # HTML version for GitHub Pages
+│   ├── requirements.txt          # Python dependencies
+│   └── .streamlit/
+│       └── config.toml          # Streamlit configuration
+│
+├── 📋 Documentation
+│   ├── README.md                 # Project documentation
+│   └── DEPLOYMENT_GUIDE.md       # Step-by-step deployment guide
+│
+├── 💾 Data Files (Auto-generated)
+│   ├── sft_records.xlsx         # Excel database
+│   ├── sft_memory.json          # Memory persistence
+│   └── final_sft_report.xlsx    # Detailed report
+│
+└── 🚀 Deployment Options
+    ├── Streamlit Cloud           # Recommended (Python)
+    ├── GitHub Pages             # HTML version only
+    ├── Heroku                   # Alternative cloud platform
+    └── Railway/Replit           # Other options
+"""
+
+print(files_structure)
