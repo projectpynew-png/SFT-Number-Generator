@@ -1,11 +1,11 @@
-
 import streamlit as st
 import pandas as pd
 import json
 from datetime import datetime
 import io
 import base64
-from sft_number_generator import SFTNumberGenerator
+import random
+import os
 
 # Page configuration
 st.set_page_config(
@@ -47,7 +47,116 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Initialize session state
+class SFTNumberGenerator:
+    """
+    SFT Number Generator Class - Embedded directly in Streamlit app
+    """
+    def __init__(self):
+        self.min_number = 3000
+        self.max_number = 9999
+
+        # Initialize from session state
+        if 'used_numbers' not in st.session_state:
+            st.session_state.used_numbers = set()
+        if 'applications' not in st.session_state:
+            st.session_state.applications = []
+
+    @property
+    def used_numbers(self):
+        return st.session_state.used_numbers
+
+    @property
+    def applications(self):
+        return st.session_state.applications
+
+    def generate_unique_sft(self):
+        """Generate a unique SFT number within the specified range"""
+        available_numbers = self.max_number - self.min_number + 1
+        if len(self.used_numbers) >= available_numbers:
+            raise ValueError("All SFT numbers in the range have been exhausted!")
+
+        while True:
+            sft_number = random.randint(self.min_number, self.max_number)
+            if sft_number not in self.used_numbers:
+                st.session_state.used_numbers.add(sft_number)
+                return sft_number
+
+    def register_application(self, app_name, description=""):
+        """Register a new application and assign an SFT number"""
+        try:
+            sft_number = self.generate_unique_sft()
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+            new_record = {
+                'SFT_Number': sft_number,
+                'Application_Name': app_name,
+                'Description': description,
+                'Registration_Date': timestamp,
+                'Status': 'Active'
+            }
+
+            st.session_state.applications.append(new_record)
+            return sft_number
+
+        except Exception as e:
+            st.error(f"Error registering application: {e}")
+            return None
+
+    def bulk_register_applications(self, applications_list):
+        """Register multiple applications at once"""
+        results = []
+        for app in applications_list:
+            sft_number = self.register_application(
+                app.get('name', 'Unknown'),
+                app.get('description', '')
+            )
+            results.append({
+                'application': app.get('name', 'Unknown'),
+                'sft_number': sft_number,
+                'success': sft_number is not None
+            })
+        return results
+
+    def reserve_specific_number(self, number, app_name, description=""):
+        """Reserve a specific SFT number if available"""
+        if not (self.min_number <= number <= self.max_number):
+            raise ValueError(f"Number {number} is outside valid range ({self.min_number}-{self.max_number})")
+
+        if number in self.used_numbers:
+            raise ValueError(f"Number {number} is already in use")
+
+        st.session_state.used_numbers.add(number)
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        new_record = {
+            'SFT_Number': number,
+            'Application_Name': app_name,
+            'Description': description,
+            'Registration_Date': timestamp,
+            'Status': 'Reserved'
+        }
+
+        st.session_state.applications.append(new_record)
+        return number
+
+    def get_statistics(self):
+        """Get statistics about SFT number usage"""
+        total_available = self.max_number - self.min_number + 1
+        used_count = len(self.used_numbers)
+        remaining = total_available - used_count
+
+        return {
+            'total_available': total_available,
+            'used_count': used_count,
+            'remaining': remaining,
+            'usage_percentage': (used_count / total_available) * 100
+        }
+
+    def is_number_available(self, number):
+        """Check if a specific SFT number is available"""
+        return (self.min_number <= number <= self.max_number) and (number not in self.used_numbers)
+
+# Initialize generator
 if 'generator' not in st.session_state:
     st.session_state.generator = SFTNumberGenerator()
 
@@ -100,17 +209,14 @@ def main():
         progress = stats['used_count'] / stats['total_available']
         st.progress(progress)
 
-        # Recent applications (if Excel file exists)
-        try:
-            df = pd.read_excel('sft_records.xlsx')
-            if not df.empty:
-                st.subheader("📋 Recent Applications")
-                # Show last 10 registrations
-                recent_df = df.tail(10).sort_values('SFT_Number', ascending=False)
-                st.dataframe(recent_df, use_container_width=True)
-            else:
-                st.info("No applications registered yet. Use the 'Register Application' page to get started!")
-        except:
+        # Recent applications
+        if st.session_state.applications:
+            st.subheader("📋 Recent Applications")
+            df = pd.DataFrame(st.session_state.applications)
+            # Show last 10 registrations
+            recent_df = df.tail(10).sort_values('SFT_Number', ascending=False)
+            st.dataframe(recent_df, use_container_width=True)
+        else:
             st.info("No applications registered yet. Use the 'Register Application' page to get started!")
 
     # Register Single Application
@@ -279,75 +385,62 @@ def main():
             else:
                 st.write("No numbers used yet.")
 
-        # Usage distribution chart (if we have data)
-        try:
-            df = pd.read_excel('sft_records.xlsx')
-            if not df.empty:
-                st.subheader("📅 Registration Timeline")
-                df['Date'] = pd.to_datetime(df['Registration_Date']).dt.date
-                daily_counts = df.groupby('Date').size().reset_index(name='Applications')
-                st.line_chart(daily_counts.set_index('Date'))
-        except:
-            pass
+        # Usage distribution chart
+        if st.session_state.applications:
+            st.subheader("📅 Registration Timeline")
+            df = pd.DataFrame(st.session_state.applications)
+            df['Date'] = pd.to_datetime(df['Registration_Date']).dt.date
+            daily_counts = df.groupby('Date').size().reset_index(name='Applications')
+            st.line_chart(daily_counts.set_index('Date'))
 
     # Export Data
     elif page == "💾 Export Data":
         st.header("💾 Export System Data")
 
-        try:
-            df = pd.read_excel('sft_records.xlsx')
+        if st.session_state.applications:
+            df = pd.DataFrame(st.session_state.applications)
 
-            if not df.empty:
-                st.subheader("📋 Current Data Preview")
-                st.dataframe(df, use_container_width=True)
+            st.subheader("📋 Current Data Preview")
+            st.dataframe(df, use_container_width=True)
 
-                # Export options
-                st.subheader("📥 Download Options")
+            # Export options
+            st.subheader("📥 Download Options")
 
-                col1, col2 = st.columns(2)
+            col1, col2 = st.columns(2)
 
-                with col1:
-                    if st.button("📊 Download Excel Report"):
-                        # Create enhanced report
-                        stats = st.session_state.generator.get_statistics()
+            with col1:
+                # Excel export
+                excel_data = io.BytesIO()
+                with pd.ExcelWriter(excel_data, engine='openpyxl') as writer:
+                    df.to_excel(writer, index=False, sheet_name='Applications')
 
-                        # Create summary
-                        summary_data = {
-                            'Metric': ['Total Available', 'Used Numbers', 'Remaining Numbers', 'Usage Percentage'],
-                            'Value': [stats['total_available'], stats['used_count'], 
-                                     stats['remaining'], f"{stats['usage_percentage']:.2f}%"]
-                        }
-                        summary_df = pd.DataFrame(summary_data)
+                    # Add summary sheet
+                    summary_data = {
+                        'Metric': ['Total Available', 'Used Numbers', 'Remaining Numbers', 'Usage Percentage'],
+                        'Value': [stats['total_available'], stats['used_count'], 
+                                 stats['remaining'], f"{stats['usage_percentage']:.2f}%"]
+                    }
+                    summary_df = pd.DataFrame(summary_data)
+                    summary_df.to_excel(writer, index=False, sheet_name='Summary')
 
-                        # Generate download
-                        output = io.BytesIO()
-                        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                            df.to_excel(writer, sheet_name='Applications', index=False)
-                            summary_df.to_excel(writer, sheet_name='Summary', index=False)
+                st.download_button(
+                    label="📊 Download Excel Report",
+                    data=excel_data.getvalue(),
+                    file_name=f"sft_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
 
-                        st.download_button(
-                            label="📥 Download Complete Report",
-                            data=output.getvalue(),
-                            file_name=f"sft_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                        )
-
-                with col2:
-                    if st.button("📋 Download CSV"):
-                        csv = df.to_csv(index=False)
-                        st.download_button(
-                            label="📥 Download CSV",
-                            data=csv,
-                            file_name=f"sft_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                            mime="text/csv"
-                        )
-            else:
-                st.info("📭 No data available to export. Register some applications first!")
-
-        except FileNotFoundError:
-            st.info("📭 No data file found. Register some applications first!")
-        except Exception as e:
-            st.error(f"❌ Error loading data: {str(e)}")
+            with col2:
+                # CSV export
+                csv = df.to_csv(index=False)
+                st.download_button(
+                    label="📋 Download CSV",
+                    data=csv,
+                    file_name=f"sft_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                    mime="text/csv"
+                )
+        else:
+            st.info("📭 No data available to export. Register some applications first!")
 
     # Footer
     st.markdown("---")
